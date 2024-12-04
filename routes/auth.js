@@ -2,39 +2,48 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Wallet = require('../models/Wallet'); // Import the Wallet model
 const verifyToken = require('../middleware/authMiddleware');
 
 const router = express.Router();
 
 // Register a user
-// Register a user
 router.post('/register', async (req, res) => {
-    try {
-      const { name, email, password } = req.body;
-  
-      if (!name || !email || !password) {
-        return res.status(400).json({ message: 'All fields are required' });
-      }
-  
-      const existingUser = await User.findOne({ email: email.toLowerCase() });
-      if (existingUser) {
-        return res.status(400).json({ message: 'User already exists' });
-      }
-  
-      const newUser = new User({
-        name,
-        email: email.toLowerCase(),
-        password, // Pass raw password
-      });
-      await newUser.save();
-  
-      res.status(201).json({ message: 'User registered successfully' });
-    } catch (error) {
-      console.error('Error during registration:', error.message);
-      res.status(500).json({ message: 'Server error' });
+  try {
+    const { name, email, password } = req.body;
+
+    // Validation: Ensure all fields are provided
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'All fields are required' });
     }
-  });
-  
+
+    // Check if the user already exists
+    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create the new user
+    const newUser = new User({
+      name,
+      email: email.toLowerCase(),
+      password,
+    });
+    await newUser.save();
+
+    // Create the new wallet for the user
+    const newWallet = new Wallet({
+      userId: newUser._id, // Link the wallet to the user
+      balance: 0,           // Initial balance is 0
+    });
+    await newWallet.save();
+
+    res.status(201).json({ message: 'User registered successfully' });
+  } catch (error) {
+    console.error('Error during registration:', error.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 // Login a user
 router.post('/login', async (req, res) => {
@@ -55,7 +64,11 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { userId: user._id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
 
     res.status(200).json({ token });
   } catch (error) {
